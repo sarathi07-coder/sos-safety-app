@@ -6,6 +6,7 @@
 // 1. Import tools
 const express = require('express');
 const http = require('http');
+const { sendEmergencySMS, buildSOSMessage } = require('./services/smsService');
 const { Server } = require('socket.io');
 const cors = require('cors');
 require('dotenv').config();
@@ -70,9 +71,21 @@ app.post('/api/sos', (req, res) => {
 
     console.log(`🚨 [SOS FIRED] ${incident.userName} | Lat: ${incident.lat}, Lng: ${incident.lng}`);
 
+    // ── AUTO SMS DISPATCH ──────────────────────────────────────
+    // Fetch this user's saved emergency contacts and send real SMS
+    const savedContacts = userContacts.get(incident.userId) || [];
+    if (savedContacts.length > 0) {
+        const smsText = buildSOSMessage(incident.userName, incident.lat, incident.lng, incident.battery);
+        sendEmergencySMS({ numbers: savedContacts, message: smsText });
+        console.log(`📱 SMS dispatched to ${savedContacts.length} contact(s)`);
+    } else {
+        console.log('ℹ️  No emergency contacts saved for this user — skipping SMS');
+    }
+
     res.status(201).json({
         success: true,
         message: 'Emergency broadcast dispatched to all responders',
+        smsSentTo: savedContacts.length,
         incident
     });
 });
